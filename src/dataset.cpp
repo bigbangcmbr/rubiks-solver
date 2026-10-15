@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string>
 
 static uint64_t next_random(uint64_t *state) {
     /* xorshift64*: deterministic and sufficient for synthetic data generation. */
@@ -33,12 +34,8 @@ int dataset_generate(const char *path, size_t count, size_t scramble_length,
             fclose(file);
             return 0;
         }
-        char *scramble = malloc(scramble_length * 4 + 1);
-        if (!scramble) {
-            fclose(file);
-            return 0;
-        }
-        size_t used = 0;
+        std::string scramble;
+        scramble.reserve(scramble_length * 4);
         int previous_face = -1;
         for (size_t step = 0; step < scramble_length; ++step) {
             int face;
@@ -46,15 +43,13 @@ int dataset_generate(const char *path, size_t count, size_t scramble_length,
             while (face == previous_face);
             int move = face * 3 + (int)(next_random(&rng) % 3);
             cube_apply_move(&cube, move);
-            if (step) scramble[used++] = ' ';
+            if (step) scramble.push_back(' ');
             const char *name = cube_move_name(move);
-            while (*name) scramble[used++] = *name++;
+            scramble += name;
             previous_face = face;
         }
-        scramble[used] = '\0';
         cube_encode(&cube, state);
-        fprintf(file, "%s,\"%s\"\n", state, scramble);
-        free(scramble);
+        fprintf(file, "%s,\"%s\"\n", state, scramble.c_str());
     }
     int ok = !ferror(file);
     if (fclose(file) != 0) ok = 0;

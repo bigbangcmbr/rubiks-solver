@@ -1,14 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
-project(rubiks_ai LANGUAGES C CXX)
+project(rubiks_ai LANGUAGES CXX)
 
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_library(rubiks_core src/cube.c src/dataset.c)
+add_library(rubiks_core src/cube.cpp src/dataset.cpp)
 target_include_directories(rubiks_core PUBLIC include)
-add_executable(rubiks src/main.c)
+add_executable(rubiks src/main.cpp)
 target_link_libraries(rubiks PRIVATE rubiks_core)
 
 option(RUBIKS_BUILD_VIEWER "Build the Vulkan + Dear ImGui interactive viewer" ON)

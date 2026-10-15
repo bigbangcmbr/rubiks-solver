@@ -56,7 +56,7 @@ uint32_t activeVertexCount = 0;
 VkPipelineLayout pipelineLayout;
 VkPipeline pipeline;
 Cube cube;
-constexpr float kHomeYaw = -0.28f, kHomePitch = 0.24f;
+constexpr float kHomeYaw = 0.0f, kHomePitch = 0.0f;
 float yaw = kHomeYaw, pitch = kHomePitch;
 bool dragging = false;
 bool framebufferResized = false;

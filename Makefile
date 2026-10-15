@@ -1,22 +1,20 @@
-CC ?= cc
-CFLAGS ?= -std=c11 -O2 -Wall -Wextra -Wpedantic
-CPPFLAGS ?= -Iinclude
-LDFLAGS ?=
+CXX ?= c++
+CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -Wpedantic
 
 BUILD_DIR := build
 TARGET := $(BUILD_DIR)/rubiks
-SOURCES := src/main.c src/cube.c src/dataset.c
-OBJECTS := $(SOURCES:src/%.c=$(BUILD_DIR)/%.o)
+SOURCES := src/main.cpp src/cube.cpp src/dataset.cpp
+OBJECTS := $(SOURCES:src/%.cpp=$(BUILD_DIR)/%.o)
 
 .PHONY: all clean viewer
 
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	$(CC) $(LDFLAGS) -o $@ $^
+	$(CXX) -o $@ $^
 
-$(BUILD_DIR)/%.o: src/%.c | $(BUILD_DIR)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+$(BUILD_DIR)/%.o: src/%.cpp | $(BUILD_DIR)
+	$(CXX) $(CXXFLAGS) -Iinclude -c $< -o $@
 
 $(BUILD_DIR):
 	mkdir -p $@
@@ -26,4 +24,4 @@ clean:
 
 viewer:
 	cmake -S . -B build-viewer -DRUBIKS_BUILD_VIEWER=ON
-	cmake --build build-viewer --target rubiks_viewer
+	cmake --build build-viewer

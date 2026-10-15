@@ -11,12 +11,12 @@ static const char face_letters[CUBE_FACE_COUNT] = {'U', 'R', 'F', 'D', 'L', 'B'}
 static Sticker sticker_at(int face, int row, int col) {
     Sticker s;
     switch (face) {
-    case 0: s.pos = (Vec){col - 1, 1, row - 1}; s.normal = (Vec){0, 1, 0}; break; /* U */
-    case 1: s.pos = (Vec){1, 1 - row, 1 - col}; s.normal = (Vec){1, 0, 0}; break; /* R */
-    case 2: s.pos = (Vec){col - 1, 1 - row, 1}; s.normal = (Vec){0, 0, 1}; break; /* F */
-    case 3: s.pos = (Vec){col - 1, -1, 1 - row}; s.normal = (Vec){0, -1, 0}; break; /* D */
-    case 4: s.pos = (Vec){-1, 1 - row, col - 1}; s.normal = (Vec){-1, 0, 0}; break; /* L */
-    default:s.pos = (Vec){1 - col, 1 - row, -1}; s.normal = (Vec){0, 0, -1}; break; /* B */
+    case 0: s.pos = Vec{col - 1, 1, row - 1}; s.normal = Vec{0, 1, 0}; break; /* U */
+    case 1: s.pos = Vec{1, 1 - row, 1 - col}; s.normal = Vec{1, 0, 0}; break; /* R */
+    case 2: s.pos = Vec{col - 1, 1 - row, 1}; s.normal = Vec{0, 0, 1}; break; /* F */
+    case 3: s.pos = Vec{col - 1, -1, 1 - row}; s.normal = Vec{0, -1, 0}; break; /* D */
+    case 4: s.pos = Vec{-1, 1 - row, col - 1}; s.normal = Vec{-1, 0, 0}; break; /* L */
+    default:s.pos = Vec{1 - col, 1 - row, -1}; s.normal = Vec{0, 0, -1}; break; /* B */
     }
     return s;
 }
@@ -24,13 +24,13 @@ static Sticker sticker_at(int face, int row, int col) {
 static Vec rotate_quarter(Vec v, int axis, int direction) {
     /* direction is +1 or -1 for a quarter turn around the positive axis. */
     if (direction < 0) {
-        if (axis == 0) return (Vec){v.x, v.z, -v.y};
-        if (axis == 1) return (Vec){-v.z, v.y, v.x};
-        return (Vec){v.y, -v.x, v.z};
+        if (axis == 0) return Vec{v.x, v.z, -v.y};
+        if (axis == 1) return Vec{-v.z, v.y, v.x};
+        return Vec{v.y, -v.x, v.z};
     }
-    if (axis == 0) return (Vec){v.x, -v.z, v.y};
-    if (axis == 1) return (Vec){v.z, v.y, -v.x};
-    return (Vec){-v.y, v.x, v.z};
+    if (axis == 0) return Vec{v.x, -v.z, v.y};
+    if (axis == 1) return Vec{v.z, v.y, -v.x};
+    return Vec{-v.y, v.x, v.z};
 }
 
 static int same_vec(Vec a, Vec b) {
