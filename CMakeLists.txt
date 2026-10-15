@@ -42,7 +42,7 @@ if(RUBIKS_BUILD_VIEWER)
   endforeach()
   add_custom_target(rubiks_shaders DEPENDS ${SHADER_BINARIES})
 
-  add_executable(rubiks_viewer src/viewer.cpp)
+  add_executable(rubiks_viewer src/viewer.cpp src/cube_renderer.cpp)
   add_dependencies(rubiks_viewer rubiks_shaders)
   target_include_directories(rubiks_viewer PRIVATE include)
   target_link_libraries(rubiks_viewer PRIVATE rubiks_core dear_imgui Vulkan::Vulkan glfw)

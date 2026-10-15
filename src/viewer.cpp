@@ -2,6 +2,7 @@
 #include <GLFW/glfw3.h>
 
 #include "cube.h"
+#include "cube_renderer.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_vulkan.h"
@@ -9,6 +10,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -21,9 +23,8 @@
 
 namespace {
 constexpr int kWidth = 1100, kHeight = 760;
-constexpr size_t kMaxVertices = 27 * 6 * 6 + CUBE_STICKER_COUNT * 54;
-struct Vertex { float x, y, z, r, g, b; };
-struct Point { float x, y, z; };
+using Vertex = rubiks::RenderVertex;
+constexpr size_t kMaxVertices = rubiks::kMaxCubeVertices;
 struct QueueFamilies { uint32_t graphics = UINT32_MAX, present = UINT32_MAX; };
 
 GLFWwindow *window;
@@ -244,7 +245,9 @@ void create_pipeline() {
     stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}; stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT; stages[0].module = vert; stages[0].pName = "main";
     stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO}; stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT; stages[1].module = frag; stages[1].pName = "main";
     VkVertexInputBindingDescription binding{0, sizeof(Vertex), VK_VERTEX_INPUT_RATE_VERTEX};
-    VkVertexInputAttributeDescription attrs[] = {{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0}, {1, 0, VK_FORMAT_R32G32B32_SFLOAT, 12}};
+    VkVertexInputAttributeDescription attrs[] = {
+        {0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, x)},
+        {1, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, r)}};
     VkPipelineVertexInputStateCreateInfo vi{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO}; vi.vertexBindingDescriptionCount = 1; vi.pVertexBindingDescriptions = &binding; vi.vertexAttributeDescriptionCount = 2; vi.pVertexAttributeDescriptions = attrs;
     VkPipelineInputAssemblyStateCreateInfo ia{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO}; ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     VkViewport viewport{0, 0, (float)extent.width, (float)extent.height, 0, 1}; VkRect2D scissor{{0, 0}, extent};
@@ -349,100 +352,6 @@ void recreate_swapchain() {
     swapchainOutOfDate = false;
 }
 
-Point rotate(Point p) {
-    float cy = std::cos(yaw), sy = std::sin(yaw), cp = std::cos(pitch), sp = std::sin(pitch);
-    Point y{cy*p.x + sy*p.z, p.y, -sy*p.x + cy*p.z};
-    return {y.x, cp*y.y - sp*y.z, sp*y.y + cp*y.z};
-}
-Point add(Point a, Point b) { return {a.x+b.x, a.y+b.y, a.z+b.z}; }
-Point scale(Point a, float s) { return {a.x*s, a.y*s, a.z*s}; }
-struct FaceBasis { Point normal, right, down; };
-const FaceBasis faceBases[] = {
-    {{0,1,0},{1,0,0},{0,0,1}}, {{1,0,0},{0,0,-1},{0,-1,0}}, {{0,0,1},{1,0,0},{0,-1,0}},
-    {{0,-1,0},{1,0,0},{0,0,-1}}, {{-1,0,0},{0,0,1},{0,-1,0}}, {{0,0,-1},{-1,0,0},{0,-1,0}}
-};
-std::array<float, 3> sticker_rgb(char c) {
-    switch (c) {
-    case 'U': return {0.94f, 0.94f, 0.92f}; case 'R': return {0.82f, 0.08f, 0.10f};
-    case 'F': return {0.04f, 0.62f, 0.24f}; case 'D': return {0.98f, 0.78f, 0.04f};
-    case 'L': return {1.00f, 0.36f, 0.03f}; default: return {0.03f, 0.30f, 0.82f};
-    }
-}
-float srgb_to_linear(float value) {
-    return value <= 0.04045f ? value / 12.92f : std::pow((value + 0.055f) / 1.055f, 2.4f);
-}
-void build_cube_vertices() {
-    const float centers[] = {-0.66f, 0.0f, 0.66f};
-    struct DrawPoly { float depth; std::vector<Point> corners; std::array<float,3> color; };
-    std::vector<DrawPoly> drawPolys;
-    auto add_poly = [&](Point center, const FaceBasis &basis, float half, std::array<float,3> rgb, float radius = 0.0f) {
-        DrawPoly p{};
-        if (radius <= 0.0f) {
-            p.corners = {
-                add(add(center, scale(basis.right,-half)), scale(basis.down,-half)),
-                add(add(center, scale(basis.right, half)), scale(basis.down,-half)),
-                add(add(center, scale(basis.right, half)), scale(basis.down, half)),
-                add(add(center, scale(basis.right,-half)), scale(basis.down, half))
-            };
-        } else {
-            constexpr float pi = 3.14159265358979323846f;
-            const float inner = half - radius;
-            const std::array<std::array<float, 3>, 4> arcs{{
-                {{-inner, -inner, pi}}, {{inner, -inner, 1.5f*pi}},
-                {{inner, inner, 0.0f}}, {{-inner, inner, 0.5f*pi}}
-            }};
-            constexpr int segmentsPerCorner = 4;
-            p.corners.reserve(4 * (segmentsPerCorner + 1));
-            for (const auto &arc : arcs) {
-                for (int segment = 0; segment <= segmentsPerCorner; ++segment) {
-                    const float angle = arc[2] + 0.5f*pi*segment/segmentsPerCorner;
-                    const float x = arc[0] + radius*std::cos(angle);
-                    const float y = arc[1] + radius*std::sin(angle);
-                    p.corners.push_back(add(add(center, scale(basis.right, x)), scale(basis.down, y)));
-                }
-            }
-        }
-        p.color = rgb;
-        for (auto corner : p.corners) p.depth += rotate(corner).z;
-        p.depth /= static_cast<float>(p.corners.size());
-        drawPolys.push_back(p);
-    };
-    const std::array<float,3> shell{0.055f,0.058f,0.063f};
-    for (int ix=0; ix<3; ++ix) for (int iy=0; iy<3; ++iy) for (int iz=0; iz<3; ++iz) {
-        Point cubie{centers[ix],centers[iy],centers[iz]};
-        for (int f=0; f<6; ++f) {
-            const auto &basis=faceBases[f];
-            if (rotate(basis.normal).z <= 0.001f) continue;
-            Point faceCenter=add(cubie,scale(basis.normal,0.34f));
-            add_poly(faceCenter,basis,0.34f,shell);
-            bool onOuterFace=(f==0&&iy==2)||(f==1&&ix==2)||(f==2&&iz==2)||
-                             (f==3&&iy==0)||(f==4&&ix==0)||(f==5&&iz==0);
-            if (!onOuterFace) continue;
-            int row = f==0 ? iz : f==3 ? 2-iz : 2-iy;
-            int col = f==1 ? 2-iz : f==4 ? iz : (f==5 ? 2-ix : ix);
-            Point stickerCenter=add(cubie,scale(basis.normal,0.342f));
-            auto rgb=sticker_rgb(cube.stickers[f*9+row*3+col]);
-            Point normal=rotate(basis.normal);
-            float light=0.72f+0.28f*std::max(0.0f,normal.x*0.35f+normal.y*0.65f+normal.z*0.68f);
-            for(float &channel:rgb) channel*=light;
-            add_poly(stickerCenter,basis,0.316f,rgb,0.045f);
-        }
-    }
-    std::sort(drawPolys.begin(),drawPolys.end(),[](const auto&a,const auto&b){return a.depth<b.depth;});
-    auto project = [](Point p) {
-        p = rotate(p); float d = std::max(1.2f, cameraDistance - p.z); float scale = 2.7f / d;
-        float aspectFix = static_cast<float>(extent.height) / static_cast<float>(extent.width);
-        return Point{p.x * scale * aspectFix, -p.y * scale, std::clamp(0.78f-p.z*0.10f,0.0f,1.0f)};
-    };
-    size_t n = 0;
-    for (const auto &poly : drawPolys) {
-        auto emit = [&](int i) { Point p = project(poly.corners[i]); mappedVertices[n++] = {p.x,p.y,p.z,poly.color[0],poly.color[1],poly.color[2]}; };
-        for (size_t i = 1; i + 1 < poly.corners.size(); ++i) {
-            emit(0); emit(static_cast<int>(i)); emit(static_cast<int>(i + 1));
-        }
-    }
-    activeVertexCount = static_cast<uint32_t>(n);
-}
 void draw_controls() {
     ImGui::SetNextWindowPos({12, 12}, ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize({270, 0}, ImGuiCond_FirstUseEver);
@@ -518,6 +427,9 @@ void update_input() {
         wasDown[k.face] = now;
     }
 }
+float srgb_to_linear(float value) {
+    return value <= 0.04045f ? value / 12.92f : std::pow((value + 0.055f) / 1.055f, 2.4f);
+}
 void draw_frame() {
     vkWaitForFences(device, 1, &frameFence, VK_TRUE, UINT64_MAX);
     uint32_t imageIndex;
@@ -526,7 +438,8 @@ void draw_frame() {
     if (acquire == VK_SUBOPTIMAL_KHR) swapchainOutOfDate = true;
     vk_check(acquire, "vkAcquireNextImageKHR");
     vkResetFences(device, 1, &frameFence); vkResetCommandBuffer(commandBuffer, 0);
-    build_cube_vertices();
+    activeVertexCount = static_cast<uint32_t>(rubiks::build_cube_vertices(cube,yaw,pitch,cameraDistance,
+        extent.width,extent.height,mappedVertices,kMaxVertices));
     VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO}; vk_check(vkBeginCommandBuffer(commandBuffer, &bi), "vkBeginCommandBuffer");
     float background = 28.0f / 255.0f;
     if (swapFormat == VK_FORMAT_B8G8R8A8_SRGB || swapFormat == VK_FORMAT_R8G8B8A8_SRGB) background = srgb_to_linear(background);
