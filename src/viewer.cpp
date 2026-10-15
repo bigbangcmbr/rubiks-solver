@@ -21,7 +21,7 @@
 
 namespace {
 constexpr int kWidth = 1100, kHeight = 760;
-constexpr size_t kMaxVertices = (27 * 6 + CUBE_STICKER_COUNT) * 6;
+constexpr size_t kMaxVertices = 27 * 6 * 6 + CUBE_STICKER_COUNT * 54;
 struct Vertex { float x, y, z, r, g, b; };
 struct Point { float x, y, z; };
 struct QueueFamilies { uint32_t graphics = UINT32_MAX, present = UINT32_MAX; };
@@ -373,19 +373,38 @@ float srgb_to_linear(float value) {
 }
 void build_cube_vertices() {
     const float centers[] = {-0.66f, 0.0f, 0.66f};
-    struct DrawPoly { float depth; std::array<Point,4> corners; std::array<float,3> color; };
+    struct DrawPoly { float depth; std::vector<Point> corners; std::array<float,3> color; };
     std::vector<DrawPoly> drawPolys;
-    auto add_poly = [&](Point center, const FaceBasis &basis, float half, std::array<float,3> rgb) {
+    auto add_poly = [&](Point center, const FaceBasis &basis, float half, std::array<float,3> rgb, float radius = 0.0f) {
         DrawPoly p{};
-        p.corners = {
-            add(add(center, scale(basis.right,-half)), scale(basis.down,-half)),
-            add(add(center, scale(basis.right, half)), scale(basis.down,-half)),
-            add(add(center, scale(basis.right, half)), scale(basis.down, half)),
-            add(add(center, scale(basis.right,-half)), scale(basis.down, half))
-        };
+        if (radius <= 0.0f) {
+            p.corners = {
+                add(add(center, scale(basis.right,-half)), scale(basis.down,-half)),
+                add(add(center, scale(basis.right, half)), scale(basis.down,-half)),
+                add(add(center, scale(basis.right, half)), scale(basis.down, half)),
+                add(add(center, scale(basis.right,-half)), scale(basis.down, half))
+            };
+        } else {
+            constexpr float pi = 3.14159265358979323846f;
+            const float inner = half - radius;
+            const std::array<std::array<float, 3>, 4> arcs{{
+                {{-inner, -inner, pi}}, {{inner, -inner, 1.5f*pi}},
+                {{inner, inner, 0.0f}}, {{-inner, inner, 0.5f*pi}}
+            }};
+            constexpr int segmentsPerCorner = 4;
+            p.corners.reserve(4 * (segmentsPerCorner + 1));
+            for (const auto &arc : arcs) {
+                for (int segment = 0; segment <= segmentsPerCorner; ++segment) {
+                    const float angle = arc[2] + 0.5f*pi*segment/segmentsPerCorner;
+                    const float x = arc[0] + radius*std::cos(angle);
+                    const float y = arc[1] + radius*std::sin(angle);
+                    p.corners.push_back(add(add(center, scale(basis.right, x)), scale(basis.down, y)));
+                }
+            }
+        }
         p.color = rgb;
         for (auto corner : p.corners) p.depth += rotate(corner).z;
-        p.depth *= 0.25f;
+        p.depth /= static_cast<float>(p.corners.size());
         drawPolys.push_back(p);
     };
     const std::array<float,3> shell{0.055f,0.058f,0.063f};
@@ -406,7 +425,7 @@ void build_cube_vertices() {
             Point normal=rotate(basis.normal);
             float light=0.72f+0.28f*std::max(0.0f,normal.x*0.35f+normal.y*0.65f+normal.z*0.68f);
             for(float &channel:rgb) channel*=light;
-            add_poly(stickerCenter,basis,0.316f,rgb);
+            add_poly(stickerCenter,basis,0.316f,rgb,0.045f);
         }
     }
     std::sort(drawPolys.begin(),drawPolys.end(),[](const auto&a,const auto&b){return a.depth<b.depth;});
@@ -418,7 +437,9 @@ void build_cube_vertices() {
     size_t n = 0;
     for (const auto &poly : drawPolys) {
         auto emit = [&](int i) { Point p = project(poly.corners[i]); mappedVertices[n++] = {p.x,p.y,p.z,poly.color[0],poly.color[1],poly.color[2]}; };
-        emit(0); emit(1); emit(2); emit(0); emit(2); emit(3);
+        for (size_t i = 1; i + 1 < poly.corners.size(); ++i) {
+            emit(0); emit(static_cast<int>(i)); emit(static_cast<int>(i + 1));
+        }
     }
     activeVertexCount = static_cast<uint32_t>(n);
 }
