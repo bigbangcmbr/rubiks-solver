@@ -3,8 +3,8 @@
 The project has a C++ cube/data core and a small interactive Vulkan viewer. The
 viewer uses GLFW for the window/input and Dear ImGui for controls. The cube has
 separate dark cubelet shells and colored stickers, perspective projection,
-depth testing, and multisample anti-aliasing on a #1C1C1C background; drag in
-the main view to orbit it.
+depth testing, and multisample anti-aliasing on a #1C1C1C background. Middle-
+drag to orbit around the cube; use Ctrl+middle-drag to dolly in and out.
 
 ## Core CLI
 
@@ -33,8 +33,9 @@ cmake --build build-viewer
 ```
 
 Resize the window as needed; the Vulkan swapchain and cube viewport are rebuilt
-to fit the new framebuffer size. Drag with the left mouse button to rotate the
-view. Use the on-screen face buttons or press `U`, `R`, `F`, `D`, `L`, or `B`;
+to fit the new framebuffer size. Middle-drag to orbit around the cube, or
+Ctrl+middle-drag to dolly in and out. Use the on-screen face buttons or press
+`U`, `R`, `F`, `D`, `L`, or `B`;
 hold Shift for an inverse turn. `Scramble` applies 20 generated turns,
 `Reset cube` restores the solved state, and `Reset view` faces the front of the
 cube straight on. The controls use DejaVu Sans at 16 px when

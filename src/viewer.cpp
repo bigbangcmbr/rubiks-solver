@@ -58,7 +58,10 @@ VkPipeline pipeline;
 Cube cube;
 constexpr float kHomeYaw = 0.0f, kHomePitch = 0.0f;
 float yaw = kHomeYaw, pitch = kHomePitch;
+constexpr float kHomeCameraDistance = 4.8f;
+float cameraDistance = kHomeCameraDistance;
 bool dragging = false;
+bool middleButtonWasDown = false;
 bool framebufferResized = false;
 bool swapchainOutOfDate = false;
 double lastX = 0, lastY = 0;
@@ -408,7 +411,7 @@ void build_cube_vertices() {
     }
     std::sort(drawPolys.begin(),drawPolys.end(),[](const auto&a,const auto&b){return a.depth<b.depth;});
     auto project = [](Point p) {
-        p = rotate(p); float d = std::max(1.2f, 4.8f - p.z); float scale = 2.7f / d;
+        p = rotate(p); float d = std::max(1.2f, cameraDistance - p.z); float scale = 2.7f / d;
         float aspectFix = static_cast<float>(extent.height) / static_cast<float>(extent.width);
         return Point{p.x * scale * aspectFix, p.y * scale, std::clamp(0.78f-p.z*0.10f,0.0f,1.0f)};
     };
@@ -425,7 +428,7 @@ void draw_controls() {
     ImGui::Begin("Cube controls", nullptr, ImGuiWindowFlags_NoCollapse);
     ImGui::TextUnformatted("Rubik's Cube");
     ImGui::Separator();
-    ImGui::TextWrapped("Drag the view to orbit. Use face buttons or U R F D L B keys; hold Shift for inverse turns.");
+    ImGui::TextWrapped("Middle-drag to orbit; Ctrl+middle-drag to dolly. Use face buttons or U R F D L B keys; hold Shift for inverse turns.");
     ImGui::Spacing();
     const char *faces[] = {"U", "R", "F", "D", "L", "B"};
     for (int i = 0; i < 6; ++i) {
@@ -448,22 +451,41 @@ void draw_controls() {
         }
     }
     if (ImGui::Button("Reset cube", {-1, 30})) { cube_init(&cube); lastScramble.clear(); }
-    if (ImGui::Button("Reset view", {-1, 30})) { yaw = kHomeYaw; pitch = kHomePitch; }
+    if (ImGui::Button("Reset view", {-1, 30})) { yaw = kHomeYaw; pitch = kHomePitch; cameraDistance = kHomeCameraDistance; }
     ImGui::Text("State: %s", cube_is_solved(&cube) ? "solved" : "scrambled");
     if (!lastScramble.empty()) { ImGui::TextUnformatted("Last scramble:"); ImGui::TextWrapped("%s", lastScramble.c_str()); }
     ImGui::End();
 }
 void update_input() {
     ImGuiIO &io = ImGui::GetIO(); double x, y; glfwGetCursorPos(window, &x, &y);
-    bool down = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    const bool middleDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
     bool shift = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-    if (down && !io.WantCaptureMouse && x > 245) {
-        if (!dragging) { dragging = true; lastX = x; lastY = y; }
-        yaw += static_cast<float>(x - lastX) * 0.008f;
-        pitch += static_cast<float>(y - lastY) * 0.008f;
-        pitch = std::clamp(pitch, -1.45f, 1.45f);
-    } else dragging = false;
-    lastX = x; lastY = y;
+    bool control = glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
+    if (!middleDown) {
+        dragging = false;
+    } else if (!middleButtonWasDown) {
+        // Only start orbiting when the press begins over the 3D view.
+        dragging = !io.WantCaptureMouse;
+        lastX = x;
+        lastY = y;
+    } else if (dragging) {
+        // Once started, keep the drag active until the middle button is released,
+        // even if the cursor passes over an ImGui window.
+        int windowWidth = 1, windowHeight = 1;
+        glfwGetWindowSize(window, &windowWidth, &windowHeight);
+        if (control) {
+            const float deltaY = static_cast<float>(y - lastY);
+            cameraDistance *= std::exp(deltaY * 1.5f / std::max(windowHeight, 1));
+            cameraDistance = std::clamp(cameraDistance, 2.4f, 12.0f);
+        } else {
+            yaw += static_cast<float>(x - lastX) * (2.0f * 3.14159265f / std::max(windowWidth, 1));
+            pitch -= static_cast<float>(y - lastY) * (2.0f * 3.14159265f / std::max(windowHeight, 1));
+            pitch = std::clamp(pitch, -1.55334f, 1.55334f);
+        }
+        lastX = x;
+        lastY = y;
+    }
+    middleButtonWasDown = middleDown;
     struct KeyMove { int key, face; } keys[] = {{GLFW_KEY_U,0},{GLFW_KEY_R,1},{GLFW_KEY_F,2},{GLFW_KEY_D,3},{GLFW_KEY_L,4},{GLFW_KEY_B,5}};
     static bool wasDown[6]{};
     for (auto k : keys) {
