@@ -1,0 +1,5 @@
+/build/
+/build-viewer/
+/data/*.csv
+
+/imgui.ini
