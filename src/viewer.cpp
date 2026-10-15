@@ -432,7 +432,7 @@ void build_cube_vertices() {
     auto project = [](Point p) {
         p = rotate(p); float d = std::max(1.2f, cameraDistance - p.z); float scale = 2.7f / d;
         float aspectFix = static_cast<float>(extent.height) / static_cast<float>(extent.width);
-        return Point{p.x * scale * aspectFix, p.y * scale, std::clamp(0.78f-p.z*0.10f,0.0f,1.0f)};
+        return Point{p.x * scale * aspectFix, -p.y * scale, std::clamp(0.78f-p.z*0.10f,0.0f,1.0f)};
     };
     size_t n = 0;
     for (const auto &poly : drawPolys) {
@@ -500,7 +500,7 @@ void update_input() {
             cameraDistance = std::clamp(cameraDistance, 2.4f, 12.0f);
         } else {
             yaw += static_cast<float>(x - lastX) * (2.0f * 3.14159265f / std::max(windowWidth, 1));
-            pitch -= static_cast<float>(y - lastY) * (2.0f * 3.14159265f / std::max(windowHeight, 1));
+            pitch += static_cast<float>(y - lastY) * (2.0f * 3.14159265f / std::max(windowHeight, 1));
             pitch = std::clamp(pitch, -1.55334f, 1.55334f);
         }
         lastX = x;
