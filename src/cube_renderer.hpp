@@ -18,7 +18,8 @@ struct RenderVertex {
 };
 
 std::size_t build_cube_vertices(const Cube &cube, float yaw, float pitch,
-                               float cameraDistance, std::uint32_t width,
+                               float cameraDistance, int animatedMove,
+                               float animationProgress, std::uint32_t width,
                                std::uint32_t height, RenderVertex *vertices,
                                std::size_t capacity);
 

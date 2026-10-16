@@ -16,6 +16,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <deque>
 #include <random>
 #include <stdexcept>
 #include <string>
@@ -69,6 +70,34 @@ double lastX = 0, lastY = 0;
 std::mt19937 rng{42};
 std::string lastScramble;
 bool imguiContextCreated = false, imguiGlfwReady = false, imguiVulkanReady = false;
+std::deque<int> pendingMoves;
+int animatedMove = -1;
+double animationStart = 0.0;
+float animationProgress = 0.0f;
+constexpr double kQuarterTurnSeconds = 0.18;
+
+double move_animation_seconds(int move) {
+    return kQuarterTurnSeconds * (move % 3 == 1 ? 2.0 : 1.0);
+}
+
+void queue_move(int move) { pendingMoves.push_back(move); }
+void update_move_animation() {
+    const double now = glfwGetTime();
+    if (animatedMove >= 0) {
+        animationProgress = static_cast<float>(std::clamp((now - animationStart) / move_animation_seconds(animatedMove), 0.0, 1.0));
+        if (animationProgress >= 1.0f) {
+            cube_apply_move(&cube, animatedMove);
+            animatedMove = -1;
+            animationProgress = 0.0f;
+        }
+    }
+    if (animatedMove < 0 && !pendingMoves.empty()) {
+        animatedMove = pendingMoves.front();
+        pendingMoves.pop_front();
+        animationStart = now;
+        animationProgress = 0.0f;
+    }
+}
 
 void vk_check(VkResult result, const char *what) {
     if (result != VK_SUCCESS) throw std::runtime_error(std::string(what) + " failed (VkResult " + std::to_string(result) + ")");
@@ -363,24 +392,24 @@ void draw_controls() {
     const char *faces[] = {"U", "R", "F", "D", "L", "B"};
     for (int i = 0; i < 6; ++i) {
         if (i) ImGui::SameLine();
-        if (ImGui::Button(faces[i], {30, 30})) cube_apply_move(&cube, i * 3);
+        if (ImGui::Button(faces[i], {30, 30})) queue_move(i * 3);
     }
     for (int i = 0; i < 6; ++i) {
         if (i) ImGui::SameLine();
         std::string label = std::string(faces[i]) + "'";
-        if (ImGui::Button(label.c_str(), {30, 28})) cube_apply_move(&cube, i * 3 + 2);
+        if (ImGui::Button(label.c_str(), {30, 28})) queue_move(i * 3 + 2);
     }
     if (ImGui::Button("Scramble", {-1, 32})) {
         std::uniform_int_distribution<int> faceDist(0, 5), turnDist(0, 2);
         lastScramble.clear(); int prev = -1;
         for (int i = 0; i < 20; ++i) {
             int f; do { f = faceDist(rng); } while (f == prev);
-            int m = f * 3 + turnDist(rng); cube_apply_move(&cube, m);
+            int m = f * 3 + turnDist(rng); queue_move(m);
             if (i) lastScramble += ' ';
             lastScramble += cube_move_name(m); prev = f;
         }
     }
-    if (ImGui::Button("Reset cube", {-1, 30})) { cube_init(&cube); lastScramble.clear(); }
+    if (ImGui::Button("Reset cube", {-1, 30})) { cube_init(&cube); pendingMoves.clear(); animatedMove = -1; animationProgress = 0.0f; lastScramble.clear(); }
     if (ImGui::Button("Reset view", {-1, 30})) { yaw = kHomeYaw; pitch = kHomePitch; cameraDistance = kHomeCameraDistance; }
     ImGui::Text("State: %s", cube_is_solved(&cube) ? "solved" : "scrambled");
     if (!lastScramble.empty()) { ImGui::TextUnformatted("Last scramble:"); ImGui::TextWrapped("%s", lastScramble.c_str()); }
@@ -422,7 +451,7 @@ void update_input() {
         bool now = glfwGetKey(window, k.key) == GLFW_PRESS;
         if (now && !wasDown[k.face]) {
             bool inverse = shift;
-            cube_apply_move(&cube, k.face * 3 + (inverse ? 2 : 0));
+            queue_move(k.face * 3 + (inverse ? 2 : 0));
         }
         wasDown[k.face] = now;
     }
@@ -439,6 +468,7 @@ void draw_frame() {
     vk_check(acquire, "vkAcquireNextImageKHR");
     vkResetFences(device, 1, &frameFence); vkResetCommandBuffer(commandBuffer, 0);
     activeVertexCount = static_cast<uint32_t>(rubiks::build_cube_vertices(cube,yaw,pitch,cameraDistance,
+        animatedMove,animationProgress,
         extent.width,extent.height,mappedVertices,kMaxVertices));
     VkCommandBufferBeginInfo bi{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO}; vk_check(vkBeginCommandBuffer(commandBuffer, &bi), "vkBeginCommandBuffer");
     float background = 28.0f / 255.0f;
@@ -499,6 +529,7 @@ int main() {
         cube_init(&cube); init_vulkan();
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
+            update_move_animation();
             if (framebufferResized || swapchainOutOfDate) recreate_swapchain();
             if (glfwWindowShouldClose(window)) break;
             ImGui_ImplVulkan_NewFrame(); ImGui_ImplGlfw_NewFrame(); ImGui::NewFrame();

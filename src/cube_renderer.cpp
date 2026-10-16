@@ -169,8 +169,29 @@ const std::vector<MeshPolygon> &mesh() {
 } // namespace
 
 std::size_t build_cube_vertices(const Cube &cube,float yaw,float pitch,float cameraDistance,
+                               int animatedMove,float animationProgress,
                                std::uint32_t width,std::uint32_t height,RenderVertex *vertices,
                                std::size_t capacity) {
+    static constexpr int axes[6]={1,0,2,1,0,2};
+    static constexpr int signs[6]={1,1,1,-1,-1,-1};
+    const int face=animatedMove>=0&&animatedMove<18?animatedMove/3:-1;
+    const int axis=face>=0?axes[face]:-1;
+    const int sign=face>=0?signs[face]:0;
+    // The inverse notation is a single quarter-turn in the opposite direction,
+    // not a three-quarter turn in the forward direction.
+    const float turns=animatedMove>=0?((animatedMove%3)==1?2.0f:((animatedMove%3)==2?-1.0f:1.0f)):0.0f;
+    const float direction=face>=0?-static_cast<float>(sign):0.0f;
+    const float angle=direction*1.57079632679f*turns*std::clamp(animationProgress,0.0f,1.0f);
+    const float ca=std::cos(angle),sa=std::sin(angle);
+    const auto animate=[&](Point p,int owner) {
+        if(face<0) return p;
+        const int ix=owner/9,iy=(owner%9)/3,iz=owner%3;
+        const int coordinate=axis==0?ix:(axis==1?iy:iz);
+        if(coordinate!=(sign>0?2:0)) return p;
+        if(axis==0) return Point{p.x,ca*p.y-sa*p.z,sa*p.y+ca*p.z};
+        if(axis==1) return Point{ca*p.x+sa*p.z,p.y,-sa*p.x+ca*p.z};
+        return Point{ca*p.x-sa*p.y,sa*p.x+ca*p.y,p.z};
+    };
     const float aspectFix=static_cast<float>(height)/static_cast<float>(width);
     const auto project=[&](Point p) {
         const Point view=rotate(p,yaw,pitch);
@@ -182,16 +203,17 @@ std::size_t build_cube_vertices(const Cube &cube,float yaw,float pitch,float cam
     };
     std::size_t written=0;
     for(const auto &polygon:mesh()) {
-        const Point normalCamera=normalize(rotate(polygon.normal,yaw,pitch));
+        const Point localNormal=animate(polygon.normal,polygon.owner);
+        const Point normalCamera=normalize(rotate(localNormal,yaw,pitch));
         if(normalCamera.z<=0.001f) continue;
         std::array<float,3> color{};
         if(polygon.stickerIndex>=0) {
             color=sticker_rgb(cube.stickers[polygon.stickerIndex]);
-            const Point n=normalize(rotate(polygon.normal,yaw,pitch));
+            const Point n=normalize(rotate(localNormal,yaw,pitch));
             const float light=0.72f+0.28f*std::max(0.0f,n.x*0.35f+n.y*0.65f+n.z*0.68f);
             for(float &channel:color) channel*=light;
         } else {
-            const Point n=polygon.normal;
+            const Point n=localNormal;
             const float light=0.58f+0.42f*std::max(0.0f,n.x*0.35f+n.y*0.65f+n.z*0.68f);
             color={0.075f*light,0.078f*light,0.084f*light};
         }
@@ -200,7 +222,7 @@ std::size_t build_cube_vertices(const Cube &cube,float yaw,float pitch,float cam
             for(std::size_t k=0;k<3;++k) {
                 if(written>=capacity) throw std::runtime_error("Cube renderer vertex capacity exceeded");
                 const std::size_t index=indices[k];
-                const auto position=project(polygon.corners[index]);
+                const auto position=project(animate(polygon.corners[index],polygon.owner));
                 vertices[written++]={position[0],position[1],position[2],color[0],color[1],color[2]};
             }
         }
